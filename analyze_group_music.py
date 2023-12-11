@@ -16,53 +16,42 @@ from bs4 import BeautifulSoup
 from urllib.parse import unquote
 import json
 
+
+# Dictionary mapping phone numbers to Contact Names
 name_dict = {
     '+1234567891' : 'Name',
 }
 
+# Replace the below path with the full path of your chat.db file
 conn = sqlite3.connect('/full/path/to/your/chat.db')
 
+# Execute the SQL query that grabs all messages from a certain group / person
+# Replace the chat ID with the ID of your conversation
 cursor = conn.cursor()
-
 main_df = pd.read_sql_query("SELECT * FROM message LEFT JOIN handle ON message.handle_id = handle.ROWID WHERE cache_roomnames like '%chatxxxxxxxxxxxxxxxxxxxx%'", conn)
 
-#num_df = pd.read_sql_query("SELECT handle.id, handle.uncanonicalized_id, count(message.handle_id) as message_count FROM message JOIN handle ON message.handle_id = handle.ROWID WHERE cache_roomnames like '%chat466737536442738%' GROUP BY message.handle_id ORDER BY message_count DESC;", conn)
-
-#num_df.columns = ['number', 'something', 'count']
-
-#num_df = num_df.drop('something', axis=1)
-
-#print(num_df)
-
-#rows = cursor.fetchall()
+# Initializations of blocklist for reactions and storage arrays
 reacts = ["Loved", "Emphasized", "Laughed at", "Liked"]
 messages=[]
 names = {}
 id_messages = {}
 
+# This method returns True if the string provided is a Spotify link to a song, not an album or playlist
 def isLink(message):
     if "http://" in message or "https://" in message:
-        if "open.spotify" in message and "album" not in message:
+        if "open.spotify" in message and "album" not in message and "playlist" not in message:
             return True
 
-#print(main_df['id'])
 
+# Iterate over the rows returned from the SQL query
 for i, row in main_df.iterrows():
 
-    # Convert row to json object and index into dict that way lol
-
-    #row_obj = json.loads(row)
-
-    #print(row_obj)
-
-    # print(dict(row))
+    # Transpose the row to index the columns
     rpd = pd.DataFrame(row)
     rpdt = rpd.T
-    #print(rpdt.loc[i]['text'])
-    # print(rpdt['text'])
+
+    # If the entry in the dataframe is a Spotify link and NOT a reaction to a message
     if not any([x in str(rpdt.loc[i]['text']) for x in reacts]) and isLink(str(rpdt.loc[i]['text'])):
-    #     #print(row[2])
-    #     messages.append(str(rpdt['text'])
     
         print("-----------------------------------")
 
@@ -70,32 +59,21 @@ for i, row in main_df.iterrows():
         print(str(rpdt.loc[i]['text']))
         print(name_dict.get(str(rpdt.loc[i]['id'])))
 
+        # Display the information (ID, link, Sender name) and add to dictionary
+
         id_messages[str(rpdt.loc[i]['text'])] = name_dict.get(str(rpdt.loc[i]['id']))
 
         print("-----------------------------------")
 
-    #     if not names[str(rpdt['id'])]:
-    #         names[str(rpdt['id'])] = 1
-    #     else:
-    #         names[str(rpdt['id'])] = int(names[rpdt['id']]) + 1
-        
-    #     id_messages[rpdt['id']] = str(rpdt['text'])
-    
-#print(len(messages))
-
-#print(names)
-
-# Replace with your own credentials
+# Replace with your own credentials for the Spotify API
 client_id = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 client_secret = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
+# Initialize the Spotify client
 client_credentials_manager = SpotifyClientCredentials(client_id, client_secret)
 sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 
-# List of albums to analyze
-#tracks = messages
-
-# Define a function to get track features from Spotify API
+# This method gets track features from Spotify API given a track ID
 def get_track_features(track_id):
     track_features = sp.audio_features(track_id)
     return track_features
@@ -105,6 +83,8 @@ all_features = []
 all_tracks = []
 all_names = []
 
+
+# This method extracts the track title from a Spotify URL
 def get_track_title(url):
     storage = io.BytesIO()
     c = pycurl.Curl()
@@ -129,11 +109,12 @@ def get_track_title(url):
 
     return cleaned
 
-
+# Iterate over the entries in the dictionary with names
 for song in id_messages:
     title = get_track_title(str(song).strip())
     print(title)
     if title:
+        # Use the track title to get the features of the track from Spotify API
         results = sp.search(q=title, type='track')
         track_id = results['tracks']['items'][0]['id']
         features = get_track_features(track_id)
@@ -158,18 +139,10 @@ features = df.drop(["id", "uri", "analysis_url", "track_href", "type", "duration
 
 print(features)
 
-# Standardize the features
-#scaled_features = (features - np.mean(features)) / np.std(features)
-
-#print(scaled_features)
-
-# Perform PCA on the standardized features
+# Perform simple 2 component PCA on the standardized features
 pca = PCA(n_components=2)
 principal_components = pca.fit_transform(features)
 principal_df = pd.DataFrame(data=principal_components, columns=["PC1", "PC2"])
-
-#print(principal_df)
-#print(df)
 
 # Add the album names and track names to the principal components dataframe
 principal_df["track_name"] = df["track_name"]
